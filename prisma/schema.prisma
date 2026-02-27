@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PrimaryRole {
+  LP
+  FOUNDER
+  VC
+  OPERATOR
+  JOURNALIST
+  ADVISOR
+}
+
+enum WatchStatus {
+  ACTIVE_WATCH
+  PASSIVE
+  ARCHIVED
+}
+
+enum ConnectionStatus {
+  FIRST
+  SECOND
+  NOT_CONNECTED
+}
+
+enum Format {
+  TEXT_ONLY
+  CAROUSEL
+  VIDEO
+  POLL
+  ARTICLE
+  RESHARE
+}
+
+enum Angle {
+  CONTRARIAN
+  EDUCATIONAL
+  INSPIRATIONAL
+  TACTICAL
+  OPINION
+  NARRATIVE
+}
+
+model Creator {
+  id                      String      @id @default(cuid())
+  fullName                String
+  linkedinUrl             String      @unique
+  handle                  String?
+  location                String?
+  firmOrCompany           String?
+  bio                     String?
+  primaryRole             PrimaryRole
+  contentNiche            String?
+  stageFocus              String?
+  geographyFocus          String?
+  tags                    String[]
+  followerCount           Int?
+  followerCountUpdatedAt  DateTime?
+  estimatedEngagementRate Float?
+  hasTwitter              Boolean     @default(false)
+  twitterUrl              String?
+  hasSubstack             Boolean     @default(false)
+  substackUrl             String?
+  hasYoutube              Boolean     @default(false)
+  youtubeUrl              String?
+  hasPodcast              Boolean     @default(false)
+  podcastUrl              String?
+  voiceStyle              String?
+  credibilityScore        Int?
+  relevanceScore          Int?
+  collaborationPotential  Boolean     @default(false)
+  collaborationNotes      String?
+  watchStatus             WatchStatus
+  connectionStatus        ConnectionStatus
+  hasInteractedWithContent Boolean    @default(false)
+  hasDMedOrMet            Boolean     @default(false)
+  relationshipNotes       String?
+  addedBy                 String?
+  source                  String?
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  posts                   Post[]
+}
+
+model Post {
+  id                     String      @id @default(cuid())
+  creatorId              String
+  postUrl                String      @unique
+  publishedAt            DateTime?
+  capturedAt             DateTime    @default(now())
+  format                 Format
+  primaryTopic           String?
+  secondaryTopics        String[]
+  containsData           Boolean     @default(false)
+  containsCTA            Boolean     @default(false)
+  ctaType                String?
+  isOriginal             Boolean     @default(true)
+  reactions              Int         @default(0)
+  comments               Int         @default(0)
+  reposts                Int         @default(0)
+  estimatedImpressions   Int?
+  engagementRate         Float?
+  viralFlag              Boolean     @default(false)
+  hookStrength           Int?
+  angle                  Angle
+  keyInsight             String?
+  relevanceToStrategy    Int?
+  swipeFileFlag          Boolean     @default(false)
+  notes                  String?
+  creator                Creator     @relation(fields: [creatorId], references: [id])
+}
