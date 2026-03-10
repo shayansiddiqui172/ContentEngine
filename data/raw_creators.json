@@ -8,8 +8,8 @@
     "posts": [
       {
         "keyInsight": null,
-        "reactions": 428,
-        "comments": 81,
+        "reactions": 461,
+        "comments": 100,
         "postUrl": "https://www.linkedin.com/in/reidhoffman/post_0",
         "creatorId": "c1",
         "id": "c1_post_0",
@@ -19,8 +19,8 @@
       },
       {
         "keyInsight": null,
-        "reactions": 692,
-        "comments": 119,
+        "reactions": 1080,
+        "comments": 174,
         "postUrl": "https://www.linkedin.com/in/reidhoffman/post_1",
         "creatorId": "c1",
         "id": "c1_post_1",
@@ -30,8 +30,8 @@
       },
       {
         "keyInsight": null,
-        "reactions": 205,
-        "comments": 34,
+        "reactions": 800,
+        "comments": 128,
         "postUrl": "https://www.linkedin.com/in/reidhoffman/post_2",
         "creatorId": "c1",
         "id": "c1_post_2",
@@ -51,8 +51,8 @@
     "posts": [
       {
         "keyInsight": null,
-        "reactions": 6,
-        "comments": 0,
+        "reactions": 14,
+        "comments": 2,
         "postUrl": "https://www.linkedin.com/in/paulgraham/post_0",
         "creatorId": "c2",
         "id": "c2_post_0",
@@ -62,8 +62,8 @@
       },
       {
         "keyInsight": null,
-        "reactions": 14,
-        "comments": 2,
+        "reactions": 9,
+        "comments": 0,
         "postUrl": "https://www.linkedin.com/in/paulgraham/post_1",
         "creatorId": "c2",
         "id": "c2_post_1",
@@ -73,8 +73,8 @@
       },
       {
         "keyInsight": null,
-        "reactions": 9,
-        "comments": 0,
+        "reactions": 43,
+        "comments": 1,
         "postUrl": "https://www.linkedin.com/in/paulgraham/post_2",
         "creatorId": "c2",
         "id": "c2_post_2",
