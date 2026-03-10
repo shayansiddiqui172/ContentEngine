@@ -26,7 +26,6 @@ DEFAULT_PRIMARY_ROLE = "FOUNDER"
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TARGET_PROFILES_PATH = os.path.join(PROJECT_ROOT, "data", "target_profiles.json")
 ENRICHED_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "data", "enriched_creators.json")
-RAW_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "data", "raw_creators.json")
 
 
 def load_target_profiles() -> list[str]:

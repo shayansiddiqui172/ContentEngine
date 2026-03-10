@@ -1,4 +1,3 @@
-import logging
 import psycopg2
 from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta
@@ -6,8 +5,6 @@ import os
 
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
-
-logger = logging.getLogger(__name__)
 
 
 def main():

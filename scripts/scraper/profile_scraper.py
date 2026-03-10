@@ -1,8 +1,5 @@
-import logging
 from datetime import datetime, timezone
 from scripts.scraper.config import DEFAULT_WATCH_STATUS, DEFAULT_CONNECTION_STATUS, DEFAULT_PRIMARY_ROLE
-
-logger = logging.getLogger(__name__)
 
 
 def map_profile_to_creator(profile: dict, linkedin_url: str) -> dict:
