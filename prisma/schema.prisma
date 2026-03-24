@@ -109,6 +109,8 @@ model Post {
   hookStrength           Int?
   angle                  Angle
   keyInsight             String?
+  summary                String?
+  whatItDoesWell         String?
   relevanceToStrategy    Int?
   swipeFileFlag          Boolean     @default(false)
   notes                  String?

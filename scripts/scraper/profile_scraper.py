@@ -1,97 +1,82 @@
+import re
 from datetime import datetime, timezone
-from scripts.scraper.config import DEFAULT_WATCH_STATUS, DEFAULT_CONNECTION_STATUS, DEFAULT_PRIMARY_ROLE
+from scripts.scraper.config import DEFAULT_CONNECTION_STATUS, DEFAULT_PRIMARY_ROLE, follower_count_range
+
+_VC_RE = re.compile(
+    r'\b(?:VC|venture\s+capital(?:ist)?|investor|investing|fund|'
+    r'managing\s+partner|general\s+partner|principal|angel\s+investor|'
+    r'limited\s+partner|LP|portfolio)\b',
+    re.IGNORECASE,
+)
+_STARTUP_RE = re.compile(
+    r'\b(?:founder|co-founder|cofounder|CEO|CTO|COO|CPO|startup|entrepreneur|building)\b',
+    re.IGNORECASE,
+)
+_AI_RE = re.compile(
+    r'\b(?:artificial\s+intelligence|machine\s+learning|deep\s+learning|LLM|GPT|neural\s+network)\b',
+    re.IGNORECASE,
+)
+
+def _detect_primary_role(bio: str | None) -> str:
+    if not bio:
+        return DEFAULT_PRIMARY_ROLE
+    vc_hits = len(_VC_RE.findall(bio))
+    startup_hits = len(_STARTUP_RE.findall(bio))
+    ai_hits = len(_AI_RE.findall(bio))
+    if vc_hits > 0 and vc_hits >= startup_hits:
+        return "VC / Investor"
+    if startup_hits > 0:
+        return "Startup"
+    if ai_hits > 0:
+        return "AI"
+    return "Ecosystem Partner"
 
 
-def map_profile_to_creator(profile: dict, linkedin_url: str) -> dict:
-    """Map a Proxycurl profile response to the Creator schema."""
-    # Build location from city/state/country
-    location_parts = [
-        profile.get("city"),
-        profile.get("state"),
-        profile.get("country_full_name"),
-    ]
-    location = ", ".join(p for p in location_parts if p) or None
+def map_profile_to_creator(profile: dict) -> dict:
+    """Map a PhantomBuster LinkedIn Profile Scraper row to the Creator schema."""
+    linkedin_url = (profile.get("linkedinProfileUrl") or profile.get("profileUrl") or "").rstrip("/")
 
-    # Get current company from experiences
-    firm = None
-    experiences = profile.get("experiences") or []
-    for exp in experiences:
-        if exp.get("ends_at") is None:  # current position
-            firm = exp.get("company")
-            break
-    if not firm and experiences:
-        firm = experiences[0].get("company")
+    full_name = f"{profile.get('firstName', '')} {profile.get('lastName', '')}".strip()
+    firm = profile.get("companyName") or None
+    location = profile.get("location") or None
+    bio = profile.get("linkedinHeadline") or profile.get("linkedinDescription") or None
 
-    # Extract handle from public_identifier or URL
-    handle = profile.get("public_identifier")
-    if not handle:
-        handle = linkedin_url.rstrip("/").split("/")[-1]
-
-    # Social links from extra field
-    extra = profile.get("extra") or {}
-    twitter_url = extra.get("twitter_profile_id")
-    if twitter_url and not twitter_url.startswith("http"):
-        twitter_url = f"https://twitter.com/{twitter_url}"
-
-    # Build tags from skills/industries
-    tags = []
-    for skill in (profile.get("skills") or []):
-        if isinstance(skill, str):
-            tags.append(skill)
-        elif isinstance(skill, dict):
-            tags.append(skill.get("name", ""))
-    tags = [t for t in tags if t][:10]  # cap at 10
+    follower_count_raw = profile.get("linkedinFollowersCount") or "0"
+    try:
+        follower_count = int(str(follower_count_raw).replace(",", ""))
+    except (ValueError, TypeError):
+        follower_count = None
 
     now = datetime.now(timezone.utc).isoformat()
 
-    creator = {
-        "fullName": profile.get("full_name") or f"{profile.get('first_name', '')} {profile.get('last_name', '')}".strip(),
+    return {
+        # Scraped fields
+        "name": full_name,
         "linkedinUrl": linkedin_url,
-        "handle": handle,
+        "bio": bio,
+        "followerCountRange": follower_count_range(follower_count),
+        "followerCount": follower_count,
         "location": location,
-        "firmOrCompany": firm,
-        "bio": profile.get("headline") or profile.get("summary"),
-        "primaryRole": DEFAULT_PRIMARY_ROLE,
+        "firmAffiliation": firm,
+        "dateAdded": now,
+        # Role detected from bio keywords; AI may refine if needed
+        "primaryRole": _detect_primary_role(bio),
         "contentNiche": None,
-        "stageFocus": None,
+        "topVoiceStyle": None,
+        "credibility": None,
+        # Computed fields (populated by run_pipeline.py after posts are mapped)
+        "growthStage": None,
+        "postingFrequency": None,
+        "crossPlatformCount": 0,
+        # Static / geography
         "geographyFocus": None,
-        "tags": tags,
-        "followerCount": profile.get("follower_count"),
-        "followerCountUpdatedAt": now,
-        "estimatedEngagementRate": None,  # computed after posts
-        "hasTwitter": bool(twitter_url),
-        "twitterUrl": twitter_url,
-        "hasSubstack": False,
-        "substackUrl": None,
-        "hasYoutube": False,
-        "youtubeUrl": None,
-        "hasPodcast": False,
-        "podcastUrl": None,
-        "voiceStyle": None,
-        "credibilityScore": None,
-        "relevanceScore": None,
-        "collaborationPotential": False,
-        "collaborationNotes": None,
-        "watchStatus": DEFAULT_WATCH_STATUS,
+        # Manual fields — left blank for team to fill in
+        "overallNotes": None,
+        "collaborationPotential": None,
         "connectionStatus": DEFAULT_CONNECTION_STATUS,
-        "hasInteractedWithContent": False,
-        "hasDMedOrMet": False,
+        "haveInteracted": False,
+        "haveDMed": False,
         "relationshipNotes": None,
-        "addedBy": "scraper",
-        "source": "proxycurl",
+        # Nested posts (populated by run_pipeline.py)
         "posts": [],
     }
-
-    # Check personal websites for substack/youtube/podcast
-    websites = profile.get("personal_urls") or []
-    for site in websites:
-        url = site if isinstance(site, str) else site.get("url", "")
-        url_lower = url.lower()
-        if "substack.com" in url_lower:
-            creator["hasSubstack"] = True
-            creator["substackUrl"] = url
-        elif "youtube.com" in url_lower or "youtu.be" in url_lower:
-            creator["hasYoutube"] = True
-            creator["youtubeUrl"] = url
-
-    return creator

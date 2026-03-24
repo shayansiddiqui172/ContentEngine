@@ -1,33 +1,59 @@
 import json
 import logging
+import time
 from google import genai
-from scripts.scraper.config import GEMINI_API_KEY, GEMINI_RATE_LIMIT
-from scripts.scraper.rate_limiter import RateLimiter
+from scripts.scraper.config import GEMINI_API_KEY
 
 logger = logging.getLogger(__name__)
 
-_rate_limiter = RateLimiter(GEMINI_RATE_LIMIT)
+GEMINI_MODEL = "gemini-2.0-flash"
+_MAX_RETRIES = 3
 
-POST_CLASSIFICATION_PROMPT = """Analyze this LinkedIn post and return a JSON object with these fields:
-- primaryTopic: main topic (e.g., "AI", "Leadership", "Fundraising", "Product", "Career")
-- secondaryTopics: list of 0-3 secondary topics
-- angle: one of CONTRARIAN, EDUCATIONAL, INSPIRATIONAL, TACTICAL, OPINION, NARRATIVE
-- hookStrength: 1-5 integer (5 = very compelling hook/opening)
-- keyInsight: 1-2 sentence summary of the main takeaway
-- containsData: true if post cites specific numbers, stats, or data
-- containsCTA: true if post has a call to action
-- ctaType: if containsCTA, describe the CTA type (e.g., "follow", "comment", "link click", "newsletter signup"), else null
-- isOriginal: true if this appears to be original content (not a reshare with minimal commentary)
+
+def _call_gemini(client, prompt: str) -> str | None:
+    """Call Gemini with exponential backoff on 429s."""
+    for attempt in range(_MAX_RETRIES):
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e:
+            msg = str(e)
+            if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+                wait = 15 * (2 ** attempt)
+                logger.warning(f"Rate limited by Gemini, waiting {wait}s before retry {attempt + 1}/{_MAX_RETRIES}...")
+                time.sleep(wait)
+            else:
+                raise
+    logger.error("Gemini request failed after all retries")
+    return None
+
+POST_CLASSIFICATION_PROMPT = """Analyze this LinkedIn post and return a JSON object with these exact fields:
+
+- primaryTopic: main topic (e.g. "AI", "Leadership", "Fundraising", "Product", "VC", "Career")
+- topicSubject: 1-2 sentence description of exactly what this post is about
+- hookStyle: one of exactly: "Personal", "Inspirational", "Story Telling", "Bold Statement", "Question", "Statistic", "Tactical"
+- hookStrength: integer 1-5 (1 = weak/boring opening, 5 = very compelling hook that demands attention)
+- tone: one of exactly: "Personal", "Educational", "Inspirational", "Contrarian", "Tactical"
+- relevance: one of exactly: "Highly Relevant", "Strongly Relevant", "Moderately Relevant", "Slightly Relevant" — assess relevance to startup founders and VCs
+- shareability: integer 1-5 (1 = niche/low shareability, 5 = broadly shareable content that spreads easily)
+- engagementScore: integer 1-5 — overall content quality and engagement potential based on structure, clarity, and value
+- topicPopularity: 1-2 sentences on how popular or trending this topic is right now in the startup and VC community
+- postFrequencyAssessment: 1 sentence on how often creators in this space typically post about this specific topic or content style
+- postWorkAnalysis: a detailed paragraph (3-5 sentences) explaining specifically why this post works or doesn't work — analyze the hook effectiveness, content structure, value proposition, emotional resonance or lack thereof, and what the creator did well or could improve
 
 Respond ONLY with valid JSON, no markdown formatting.
 
 Post text:
 {post_text}"""
 
-CREATOR_ENRICHMENT_PROMPT = """Based on these LinkedIn posts from a single creator, analyze their content patterns and return a JSON object:
-- contentNiche: their primary content focus area (e.g., "AI/ML", "Venture Capital", "Leadership")
-- voiceStyle: describe their writing style in 2-4 words (e.g., "data-driven analytical", "storytelling inspirational", "contrarian provocative")
-- primaryRole: best fit from: LP, FOUNDER, VC, OPERATOR, JOURNALIST, ADVISOR
+CREATOR_ENRICHMENT_PROMPT = """Based on these LinkedIn posts from a single creator, analyze their content patterns and return a JSON object with these exact fields:
+
+- contentNiche: their primary content focus area (e.g. "AI/ML", "Venture Capital", "Leadership", "Startups", "Deep Tech")
+- topVoiceStyle: one of exactly: "Data Driven", "Story Telling", "Tactical", "Contrarian" — pick whichever best describes their dominant style
+- credibility: integer 1-5 (1 = unclear expertise or low authority, 5 = highly credible thought leader with demonstrated domain expertise)
 
 Creator bio: {bio}
 
@@ -36,16 +62,19 @@ Their recent posts:
 
 Respond ONLY with valid JSON, no markdown formatting."""
 
+VALID_HOOK_STYLES = ("Personal", "Inspirational", "Story Telling", "Bold Statement", "Question", "Statistic", "Tactical")
+VALID_TONES = ("Personal", "Educational", "Inspirational", "Contrarian", "Tactical")
+VALID_RELEVANCE = ("Highly Relevant", "Strongly Relevant", "Moderately Relevant", "Slightly Relevant")
+VALID_VOICE_STYLES = ("Data Driven", "Story Telling", "Tactical", "Contrarian")
+
 
 def _init_gemini():
-    """Initialize Gemini client using the new google.genai SDK."""
     if not GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY not set in environment")
     return genai.Client(api_key=GEMINI_API_KEY)
 
 
 def _parse_json_response(text: str) -> dict | None:
-    """Parse JSON from Gemini response, handling markdown code blocks."""
     text = text.strip()
     if text.startswith("```"):
         lines = text.split("\n")
@@ -65,30 +94,43 @@ def enrich_post(client, post: dict) -> dict:
         logger.debug(f"Skipping enrichment for short/empty post: {post.get('postUrl')}")
         return post
 
-    _rate_limiter.wait()
     try:
         prompt = POST_CLASSIFICATION_PROMPT.format(post_text=text[:3000])
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        result = _parse_json_response(response.text)
+        raw = _call_gemini(client, prompt)
+        result = _parse_json_response(raw) if raw else None
 
         if result:
             post["primaryTopic"] = result.get("primaryTopic")
-            post["secondaryTopics"] = result.get("secondaryTopics", [])[:3]
-            angle = result.get("angle", "EDUCATIONAL")
-            if angle in ("CONTRARIAN", "EDUCATIONAL", "INSPIRATIONAL", "TACTICAL", "OPINION", "NARRATIVE"):
-                post["angle"] = angle
-            hook = result.get("hookStrength")
-            if isinstance(hook, int) and 1 <= hook <= 5:
-                post["hookStrength"] = hook
-            post["keyInsight"] = result.get("keyInsight")
-            post["containsData"] = bool(result.get("containsData"))
-            post["containsCTA"] = bool(result.get("containsCTA"))
-            post["ctaType"] = result.get("ctaType")
-            if result.get("isOriginal") is not None:
-                post["isOriginal"] = bool(result.get("isOriginal"))
+            post["topicSubject"] = result.get("topicSubject")
+
+            hook_style = result.get("hookStyle")
+            if hook_style in VALID_HOOK_STYLES:
+                post["hookStyle"] = hook_style
+
+            hook_strength = result.get("hookStrength")
+            if isinstance(hook_strength, int) and 1 <= hook_strength <= 5:
+                post["hookStrength"] = hook_strength
+
+            tone = result.get("tone")
+            if tone in VALID_TONES:
+                post["tone"] = tone
+
+            relevance = result.get("relevance")
+            if relevance in VALID_RELEVANCE:
+                post["relevance"] = relevance
+
+            shareability = result.get("shareability")
+            if isinstance(shareability, int) and 1 <= shareability <= 5:
+                post["shareability"] = shareability
+
+            eng_score = result.get("engagementScore")
+            if isinstance(eng_score, int) and 1 <= eng_score <= 5:
+                post["engagementScore"] = eng_score
+
+            post["topicPopularity"] = result.get("topicPopularity")
+            post["postFrequencyAssessment"] = result.get("postFrequencyAssessment")
+            post["postWorkAnalysis"] = result.get("postWorkAnalysis")
+
     except Exception as e:
         logger.error(f"Gemini enrichment failed for post {post.get('postUrl')}: {e}")
 
@@ -101,34 +143,34 @@ def enrich_creator(client, creator: dict) -> dict:
     posts_with_text = [p for p in posts if p.get("_text", "").strip()]
 
     if not posts_with_text:
-        logger.debug(f"No post text for creator enrichment: {creator.get('fullName')}")
+        logger.debug(f"No post text for creator enrichment: {creator.get('name')}")
         return creator
 
     posts_text = "\n---\n".join(
         p.get("_text", "")[:500] for p in posts_with_text[:5]
     )
 
-    _rate_limiter.wait()
     try:
         prompt = CREATOR_ENRICHMENT_PROMPT.format(
             bio=creator.get("bio", "N/A"),
             posts_text=posts_text,
         )
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        result = _parse_json_response(response.text)
+        raw = _call_gemini(client, prompt)
+        result = _parse_json_response(raw) if raw else None
 
         if result:
             creator["contentNiche"] = result.get("contentNiche")
-            creator["voiceStyle"] = result.get("voiceStyle")
-            role = result.get("primaryRole")
-            valid_roles = ("LP", "FOUNDER", "VC", "OPERATOR", "JOURNALIST", "ADVISOR")
-            if role in valid_roles:
-                creator["primaryRole"] = role
+
+            voice_style = result.get("topVoiceStyle")
+            if voice_style in VALID_VOICE_STYLES:
+                creator["topVoiceStyle"] = voice_style
+
+            credibility = result.get("credibility")
+            if isinstance(credibility, int) and 1 <= credibility <= 5:
+                creator["credibility"] = credibility
+
     except Exception as e:
-        logger.error(f"Gemini creator enrichment failed for {creator.get('fullName')}: {e}")
+        logger.error(f"Gemini creator enrichment failed for {creator.get('name')}: {e}")
 
     return creator
 
@@ -146,9 +188,9 @@ def run_enrichment(creators: list[dict], skip: bool = False) -> list[dict]:
     for creator in creators:
         for i, post in enumerate(creator.get("posts", [])):
             creator["posts"][i] = enrich_post(client, post)
-        creator = enrich_creator(client, creator)
+        enrich_creator(client, creator)
 
-    # Compute creator-level estimated engagement rate
+    # Compute creator-level estimated engagement rate (average of post rates)
     for creator in creators:
         rates = [p["engagementRate"] for p in creator.get("posts", []) if p.get("engagementRate")]
         if rates:
