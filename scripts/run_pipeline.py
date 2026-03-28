@@ -16,7 +16,6 @@ import sys
 from datetime import datetime, timezone
 
 from scripts.scraper.config import (
-    GEMINI_API_KEY,
     ANTHROPIC_API_KEY,
     ENRICHED_OUTPUT_PATH,
     PHANTOMBUSTER_API_KEY,
@@ -148,7 +147,7 @@ def main():
     parser = argparse.ArgumentParser(description="ContentEngine LinkedIn pipeline")
     parser.add_argument("--profile", type=str, help="Scrape a single LinkedIn profile URL")
     parser.add_argument("--all", action="store_true", help="Scrape all profiles from data/profiles.txt")
-    parser.add_argument("--skip-enrich", action="store_true", help="Skip Gemini enrichment")
+    parser.add_argument("--skip-enrich", action="store_true", help="Skip AI enrichment")
     parser.add_argument("--dry-run", action="store_true", help="Skip DB ingestion (spreadsheet still written)")
     parser.add_argument("--max-posts", type=int, default=None, help="Limit posts per creator (e.g. 3 for a quick demo)")
     args = parser.parse_args()
@@ -156,8 +155,8 @@ def main():
     if not PHANTOMBUSTER_API_KEY:
         logger.error("PHANTOMBUSTER_API_KEY not set in .env")
         sys.exit(1)
-    if not args.skip_enrich and not GEMINI_API_KEY and not ANTHROPIC_API_KEY:
-        logger.error("GEMINI_API_KEY or ANTHROPIC_API_KEY not set in .env — use --skip-enrich to bypass")
+    if not args.skip_enrich and not ANTHROPIC_API_KEY:
+        logger.error("ANTHROPIC_API_KEY not set in .env — use --skip-enrich to bypass")
         sys.exit(1)
 
     if args.profile:

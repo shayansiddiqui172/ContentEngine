@@ -4,15 +4,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API Keys
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 PHANTOMBUSTER_API_KEY = os.getenv("PHANTOMBUSTER_API_KEY")
 PHANTOMBUSTER_PROFILE_AGENT_ID = os.getenv("PHANTOMBUSTER_PROFILE_AGENT_ID")
 PHANTOMBUSTER_ACTIVITY_AGENT_ID = os.getenv("PHANTOMBUSTER_ACTIVITY_AGENT_ID")
-
-# Rate limits
-GEMINI_RATE_LIMIT = 10  # requests per second
 
 # Thresholds
 VIRAL_FLAG_MULTIPLIER = 2.0  # engagement > 2x creator average = viral

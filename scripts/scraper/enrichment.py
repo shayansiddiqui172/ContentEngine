@@ -1,34 +1,13 @@
 import json
 import logging
 import time
-from scripts.scraper.config import GEMINI_API_KEY, ANTHROPIC_API_KEY
+import anthropic
+from scripts.scraper.config import ANTHROPIC_API_KEY
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-2.0-flash"
 ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 _MAX_RETRIES = 3
-
-
-def _call_gemini(client, prompt: str) -> str | None:
-    """Call Gemini with exponential backoff on 429s."""
-    for attempt in range(_MAX_RETRIES):
-        try:
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=prompt,
-            )
-            return response.text
-        except Exception as e:
-            msg = str(e)
-            if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
-                wait = 15 * (2 ** attempt)
-                logger.warning(f"Rate limited by Gemini, waiting {wait}s before retry {attempt + 1}/{_MAX_RETRIES}...")
-                time.sleep(wait)
-            else:
-                raise
-    logger.error("Gemini request failed after all retries")
-    return None
 
 
 def _call_anthropic(client, prompt: str) -> str | None:
@@ -92,18 +71,12 @@ VALID_VOICE_STYLES = ("Data Driven", "Story Telling", "Tactical", "Contrarian")
 
 
 def _init_client():
-    """Return (call_fn, client) preferring Anthropic if key present, else Gemini."""
-    if ANTHROPIC_API_KEY:
-        import anthropic
-        logger.info("Using Anthropic for enrichment")
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        return _call_anthropic, client
-    if GEMINI_API_KEY:
-        from google import genai
-        logger.info("Using Gemini for enrichment")
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        return _call_gemini, client
-    raise ValueError("Neither ANTHROPIC_API_KEY nor GEMINI_API_KEY is set in environment")
+    """Return (call_fn, client) using Anthropic."""
+    if not ANTHROPIC_API_KEY:
+        raise ValueError("ANTHROPIC_API_KEY is not set in environment")
+    logger.info("Using Anthropic for enrichment")
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    return _call_anthropic, client
 
 
 def _parse_json_response(text: str) -> dict | None:
