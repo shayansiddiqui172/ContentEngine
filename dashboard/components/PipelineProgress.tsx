@@ -2,7 +2,7 @@ const STEPS = [
   { label: "Creators", color: "#22c55e" },   // green
   { label: "Scrape",   color: "#818cf8" },   // indigo
   { label: "Ingest",   color: "#f87171" },   // red
-  { label: "Gemini",   color: "#d97706" },   // amber
+  { label: "Claude",   color: "#d97706" },   // amber
   { label: "Metrics",  color: "#60a5fa" },   // blue
   { label: "Dashboard",color: "#9f1239" },   // rose-dark
 ];
