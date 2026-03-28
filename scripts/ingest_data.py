@@ -35,6 +35,14 @@ CREATOR_INSERT_FIELDS = ["fullName", "linkedinUrl"] + [
 ]
 POST_INSERT_FIELDS = ["postUrl"] + POST_UPSERT_FIELDS
 
+# Map internal primaryRole values → DB PrimaryRole enum
+_ROLE_TO_DB = {
+    "VC / Investor": "VC",
+    "Startup": "FOUNDER",
+    "AI": "OPERATOR",
+    "Ecosystem Partner": "OPERATOR",
+}
+
 # Map new internal field names → DB column names for creators
 _CREATOR_FIELD_MAP = {
     "name": "fullName",
@@ -115,7 +123,7 @@ def _build_creator_db_record(creator: dict) -> dict:
         "location": creator.get("location"),
         "firmOrCompany": creator.get("firmAffiliation") or creator.get("firmOrCompany"),
         "bio": creator.get("bio"),
-        "primaryRole": creator.get("primaryRole", "Startup"),
+        "primaryRole": _ROLE_TO_DB.get(creator.get("primaryRole", "Startup"), "FOUNDER"),
         "contentNiche": creator.get("contentNiche"),
         "stageFocus": creator.get("growthStage") or creator.get("stageFocus"),
         "geographyFocus": creator.get("geographyFocus"),

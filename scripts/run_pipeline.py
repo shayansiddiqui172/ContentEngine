@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 
 from scripts.scraper.config import (
     GEMINI_API_KEY,
+    ANTHROPIC_API_KEY,
     ENRICHED_OUTPUT_PATH,
     PHANTOMBUSTER_API_KEY,
     follower_count_range,
@@ -155,8 +156,8 @@ def main():
     if not PHANTOMBUSTER_API_KEY:
         logger.error("PHANTOMBUSTER_API_KEY not set in .env")
         sys.exit(1)
-    if not args.skip_enrich and not GEMINI_API_KEY:
-        logger.error("GEMINI_API_KEY not set in .env or use --skip-enrich")
+    if not args.skip_enrich and not GEMINI_API_KEY and not ANTHROPIC_API_KEY:
+        logger.error("GEMINI_API_KEY or ANTHROPIC_API_KEY not set in .env — use --skip-enrich to bypass")
         sys.exit(1)
 
     if args.profile:

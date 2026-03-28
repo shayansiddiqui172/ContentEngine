@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "dev": "cd dashboard && npm run dev"
+  },
   "dependencies": {
     "dotenv": "^17.3.1"
   },

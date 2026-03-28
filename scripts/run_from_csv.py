@@ -12,7 +12,7 @@ import logging
 import os
 import sys
 
-from scripts.scraper.config import GEMINI_API_KEY, ENRICHED_OUTPUT_PATH
+from scripts.scraper.config import GEMINI_API_KEY, ANTHROPIC_API_KEY, ENRICHED_OUTPUT_PATH
 from scripts.scraper.profile_scraper import map_profile_to_creator
 from scripts.scraper.post_scraper import map_posts_to_schema
 from scripts.scraper.enrichment import run_enrichment
@@ -39,8 +39,8 @@ def main():
     parser.add_argument("--skip-enrich", action="store_true", help="Skip Gemini enrichment")
     args = parser.parse_args()
 
-    if not args.skip_enrich and not GEMINI_API_KEY:
-        logger.error("GEMINI_API_KEY not set in .env — use --skip-enrich to bypass")
+    if not args.skip_enrich and not GEMINI_API_KEY and not ANTHROPIC_API_KEY:
+        logger.error("GEMINI_API_KEY or ANTHROPIC_API_KEY not set in .env — use --skip-enrich to bypass")
         sys.exit(1)
 
     # ── Load CSVs ──────────────────────────────────────────────────────────────

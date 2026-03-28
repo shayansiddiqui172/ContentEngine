@@ -1,12 +1,12 @@
 import json
 import logging
 import time
-from google import genai
-from scripts.scraper.config import GEMINI_API_KEY
+from scripts.scraper.config import GEMINI_API_KEY, ANTHROPIC_API_KEY
 
 logger = logging.getLogger(__name__)
 
 GEMINI_MODEL = "gemini-2.0-flash"
+ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 _MAX_RETRIES = 3
 
 
@@ -29,6 +29,29 @@ def _call_gemini(client, prompt: str) -> str | None:
                 raise
     logger.error("Gemini request failed after all retries")
     return None
+
+
+def _call_anthropic(client, prompt: str) -> str | None:
+    """Call Anthropic with exponential backoff on rate limits."""
+    for attempt in range(_MAX_RETRIES):
+        try:
+            message = client.messages.create(
+                model=ANTHROPIC_MODEL,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return message.content[0].text
+        except Exception as e:
+            msg = str(e)
+            if "429" in msg or "rate_limit" in msg.lower() or "overloaded" in msg.lower():
+                wait = 15 * (2 ** attempt)
+                logger.warning(f"Rate limited by Anthropic, waiting {wait}s before retry {attempt + 1}/{_MAX_RETRIES}...")
+                time.sleep(wait)
+            else:
+                raise
+    logger.error("Anthropic request failed after all retries")
+    return None
+
 
 POST_CLASSIFICATION_PROMPT = """Analyze this LinkedIn post and return a JSON object with these exact fields:
 
@@ -68,10 +91,19 @@ VALID_RELEVANCE = ("Highly Relevant", "Strongly Relevant", "Moderately Relevant"
 VALID_VOICE_STYLES = ("Data Driven", "Story Telling", "Tactical", "Contrarian")
 
 
-def _init_gemini():
-    if not GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY not set in environment")
-    return genai.Client(api_key=GEMINI_API_KEY)
+def _init_client():
+    """Return (call_fn, client) preferring Anthropic if key present, else Gemini."""
+    if ANTHROPIC_API_KEY:
+        import anthropic
+        logger.info("Using Anthropic for enrichment")
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        return _call_anthropic, client
+    if GEMINI_API_KEY:
+        from google import genai
+        logger.info("Using Gemini for enrichment")
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        return _call_gemini, client
+    raise ValueError("Neither ANTHROPIC_API_KEY nor GEMINI_API_KEY is set in environment")
 
 
 def _parse_json_response(text: str) -> dict | None:
@@ -83,12 +115,12 @@ def _parse_json_response(text: str) -> dict | None:
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse Gemini JSON response: {e}\nResponse: {text[:500]}")
+        logger.error(f"Failed to parse AI JSON response: {e}\nResponse: {text[:500]}")
         return None
 
 
-def enrich_post(client, post: dict) -> dict:
-    """Enrich a single post with Gemini classification."""
+def enrich_post(call_fn, client, post: dict) -> dict:
+    """Enrich a single post with AI classification."""
     text = post.get("_text", "")
     if not text or len(text.strip()) < 20:
         logger.debug(f"Skipping enrichment for short/empty post: {post.get('postUrl')}")
@@ -96,7 +128,7 @@ def enrich_post(client, post: dict) -> dict:
 
     try:
         prompt = POST_CLASSIFICATION_PROMPT.format(post_text=text[:3000])
-        raw = _call_gemini(client, prompt)
+        raw = call_fn(client, prompt)
         result = _parse_json_response(raw) if raw else None
 
         if result:
@@ -132,12 +164,12 @@ def enrich_post(client, post: dict) -> dict:
             post["postWorkAnalysis"] = result.get("postWorkAnalysis")
 
     except Exception as e:
-        logger.error(f"Gemini enrichment failed for post {post.get('postUrl')}: {e}")
+        logger.error(f"AI enrichment failed for post {post.get('postUrl')}: {e}")
 
     return post
 
 
-def enrich_creator(client, creator: dict) -> dict:
+def enrich_creator(call_fn, client, creator: dict) -> dict:
     """Enrich creator with aggregated insights from their posts."""
     posts = creator.get("posts", [])
     posts_with_text = [p for p in posts if p.get("_text", "").strip()]
@@ -155,7 +187,7 @@ def enrich_creator(client, creator: dict) -> dict:
             bio=creator.get("bio", "N/A"),
             posts_text=posts_text,
         )
-        raw = _call_gemini(client, prompt)
+        raw = call_fn(client, prompt)
         result = _parse_json_response(raw) if raw else None
 
         if result:
@@ -170,25 +202,25 @@ def enrich_creator(client, creator: dict) -> dict:
                 creator["credibility"] = credibility
 
     except Exception as e:
-        logger.error(f"Gemini creator enrichment failed for {creator.get('name')}: {e}")
+        logger.error(f"AI creator enrichment failed for {creator.get('name')}: {e}")
 
     return creator
 
 
 def run_enrichment(creators: list[dict], skip: bool = False) -> list[dict]:
-    """Run Gemini enrichment on all creators and their posts."""
+    """Run AI enrichment on all creators and their posts."""
     if skip:
-        logger.info("Skipping Gemini enrichment (--skip-enrich)")
+        logger.info("Skipping AI enrichment (--skip-enrich)")
         return creators
 
-    client = _init_gemini()
+    call_fn, client = _init_client()
     total_posts = sum(len(c.get("posts", [])) for c in creators)
-    logger.info(f"Enriching {len(creators)} creators, {total_posts} posts with Gemini...")
+    logger.info(f"Enriching {len(creators)} creators, {total_posts} posts...")
 
     for creator in creators:
         for i, post in enumerate(creator.get("posts", [])):
-            creator["posts"][i] = enrich_post(client, post)
-        enrich_creator(client, creator)
+            creator["posts"][i] = enrich_post(call_fn, client, post)
+        enrich_creator(call_fn, client, creator)
 
     # Compute creator-level estimated engagement rate (average of post rates)
     for creator in creators:
