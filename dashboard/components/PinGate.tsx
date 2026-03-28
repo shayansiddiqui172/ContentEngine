@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 
-const CORRECT_PIN = "1145";
 const STORAGE_KEY = "wc_unlocked";
 
 export default function PinGate({ children }: { children: React.ReactNode }) {
@@ -12,6 +11,7 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
   const [error, setError]       = useState(false);
   const [shake, setShake]       = useState(false);
   const [success, setSuccess]   = useState(false);
+  const [loading, setLoading]   = useState(false);
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
@@ -19,19 +19,16 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
     setChecked(true);
   }, []);
 
-  function handleInput(i: number, val: string) {
-    if (!/^\d?$/.test(val)) return;
-    const next = [...pin];
-    next[i] = val;
-    setPin(next);
-    setError(false);
-
-    // Auto-advance
-    if (val && i < 3) inputs.current[i + 1]?.focus();
-
-    // Check when last digit entered
-    if (val && next.every((d) => d !== "")) {
-      if (next.join("") === CORRECT_PIN) {
+  async function checkPin(digits: string[]) {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: digits.join("") }),
+      });
+      const { ok } = await res.json();
+      if (ok) {
         setSuccess(true);
         localStorage.setItem(STORAGE_KEY, "true");
         setTimeout(() => setUnlocked(true), 500);
@@ -45,6 +42,27 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
           inputs.current[0]?.focus();
         }, 650);
       }
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleInput(i: number, val: string) {
+    if (loading) return;
+    if (!/^\d?$/.test(val)) return;
+    const next = [...pin];
+    next[i] = val;
+    setPin(next);
+    setError(false);
+
+    // Auto-advance
+    if (val && i < 3) inputs.current[i + 1]?.focus();
+
+    // Check when last digit entered
+    if (val && next.every((d) => d !== "")) {
+      checkPin(next);
     }
   }
 
@@ -133,6 +151,8 @@ export default function PinGate({ children }: { children: React.ReactNode }) {
                   ? "border-emerald-400/60 bg-emerald-500/10"
                   : error
                   ? "border-red-400/60 bg-red-500/10"
+                  : loading
+                  ? "border-white/20 bg-white/5 opacity-60"
                   : digit
                   ? "border-[#4EB8C8]/70 bg-white/10"
                   : "border-white/15 hover:border-white/30 focus:border-white/50 bg-white/5",
