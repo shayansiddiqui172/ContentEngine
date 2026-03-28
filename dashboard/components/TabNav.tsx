@@ -7,8 +7,9 @@ import CreatorsTab from "./CreatorsTab";
 import PostsTab from "./PostsTab";
 import AnalyticsTab from "./AnalyticsTab";
 import InsightsTab from "./InsightsTab";
+import DataTab from "./DataTab";
 
-const TABS = ["Creators", "Posts", "Analytics", "Insights"] as const;
+const TABS = ["Creators", "Posts", "Analytics", "Insights", "Data"] as const;
 type Tab = (typeof TABS)[number];
 
 interface TabNavProps {
@@ -49,6 +50,7 @@ export default function TabNav({ creators, posts, stats, creatorStatsMap, follow
       {active === "Posts" && <PostsTab posts={posts} followerMap={followerMap} />}
       {active === "Analytics" && <AnalyticsTab posts={posts} followerMap={followerMap} />}
       {active === "Insights" && <InsightsTab posts={posts} creators={creators} />}
+      {active === "Data" && <DataTab creators={creators} posts={posts} />}
     </div>
   );
 }

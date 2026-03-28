@@ -2,8 +2,8 @@
 """ContentEngine LinkedIn scraping pipeline.
 
 Usage:
-    python -m scripts.run_pipeline --profile https://www.linkedin.com/in/williamhgates [--skip-enrich] [--dry-run]
-    python -m scripts.run_pipeline --all [--skip-enrich] [--dry-run]
+    python -m scripts.run_pipeline --profile https://www.linkedin.com/in/williamhgates [--skip-enrich]
+    python -m scripts.run_pipeline --all [--skip-enrich]
 
 Profiles for --all are listed in data/profiles.txt (one LinkedIn URL per line).
 """
@@ -148,7 +148,6 @@ def main():
     parser.add_argument("--profile", type=str, help="Scrape a single LinkedIn profile URL")
     parser.add_argument("--all", action="store_true", help="Scrape all profiles from data/profiles.txt")
     parser.add_argument("--skip-enrich", action="store_true", help="Skip AI enrichment")
-    parser.add_argument("--dry-run", action="store_true", help="Skip DB ingestion (spreadsheet still written)")
     parser.add_argument("--max-posts", type=int, default=None, help="Limit posts per creator (e.g. 3 for a quick demo)")
     args = parser.parse_args()
 
@@ -200,17 +199,6 @@ def main():
     logger.info("Writing spreadsheets...")
     from scripts.write_spreadsheets import write_spreadsheets
     write_spreadsheets(creators)
-
-    # ── Phase 6: Ingest to DB ──────────────────────────────────────────────────
-    if args.dry_run:
-        logger.info("Dry run — skipping DB ingestion")
-    else:
-        logger.info("Ingesting to database...")
-        from scripts.ingest_data import main as ingest_main
-        ingest_main()
-        logger.info("Running validation...")
-        from scripts.validate_data import main as validate_main
-        validate_main()
 
     logger.info("Pipeline complete.")
 

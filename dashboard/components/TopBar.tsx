@@ -177,9 +177,14 @@ export default function TopBar({ lastRun, creatorCount, postCount }: TopBarProps
 
               {/* Mode description */}
               <p className="text-xs text-gray-500">
-                {mode === "csv"
-                  ? "Reads existing CSVs from /PB/profileres.csv and /PB/postres.csv — no PhantomBuster trigger."
-                  : "Automatically launches PhantomBuster agents for the given LinkedIn URL, waits for completion, then enriches."}
+                {mode === "csv" ? (
+                  <span>
+                    <span className="font-semibold text-amber-600">⚠ PhantomBuster must already be scraped/run with your creators</span>
+                    {" "}before using this option. Once it has finished, this reads /PB/profileres.csv and /PB/postres.csv and runs enrichment + display — no PhantomBuster trigger.
+                  </span>
+                ) : (
+                  "Automatically launches PhantomBuster agents for the given LinkedIn URL, waits for completion, then enriches."
+                )}
               </p>
 
               {/* URL input for profile mode */}
